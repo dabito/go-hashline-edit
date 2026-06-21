@@ -29,7 +29,7 @@ make install LOCAL_BIN="$HOME/bin"
 Or use standard Go install:
 
 ```bash
-go install .
+go install github.com/dabito/go-hashline-edit@latest
 ```
 
 Build without installing:
@@ -41,26 +41,21 @@ make build
 
 ## Pi integration
 
-This repo includes a pi extension in [`pi-hledit/`](./pi-hledit/) that exposes the binary as tools:
+The pi extension is extracted to [dabito/pi-hledit](https://github.com/dabito/pi-hledit).
 
-- `hledit_read`
-- `hledit_replace`
-- `hledit_replace_range`
-- `hledit_insert`
-
-For this machine it is symlinked into pi's global extension directory:
+Install:
 
 ```bash
-~/.pi/agent/extensions/pi-hledit -> ./pi-hledit
+pi install git:github.com/dabito/pi-hledit
 ```
 
-After changing the extension, reload pi:
+Reload pi:
 
 ```text
 /reload
 ```
 
-The extension uses `~/.local/bin/hledit` by default. Override with:
+The extension registers a single `hledit` tool with `op` parameter (read/edit/batch). It uses `~/.local/bin/hledit` by default. Override with:
 
 ```bash
 export HLEDIT_BIN=/path/to/hledit
