@@ -29,8 +29,12 @@ async function runHledit(
 		let stderr = "";
 		child.stdout.setEncoding("utf8");
 		child.stderr.setEncoding("utf8");
-		child.stdout.on("data", (chunk) => { stdout += chunk; });
-		child.stderr.on("data", (chunk) => { stderr += chunk; });
+		child.stdout.on("data", (chunk) => {
+			stdout += chunk;
+		});
+		child.stderr.on("data", (chunk) => {
+			stderr += chunk;
+		});
 		child.on("error", () => resolve({ stdout, stderr, exitCode: 1 }));
 		child.on("close", (exitCode) => resolve({ stdout, stderr, exitCode }));
 		child.stdin.end(stdin ?? "");
@@ -58,7 +62,8 @@ export default function piHleditExtension(pi: ExtensionAPI) {
 			"Read, edit, or batch-edit files using hash-anchored line references (LN#HASH). " +
 			"Use op:'read' to get anchors, op:'edit' for single changes, op:'batch' for multiple edits in one call. " +
 			"Anchors come from the most recent read and detect stale context before any write.",
-		promptSnippet: "Read/edit files with stale-safe hash-anchored line references",
+		promptSnippet:
+			"Read/edit files with stale-safe hash-anchored line references",
 		promptGuidelines: [
 			"ALWAYS use hledit instead of the built-in edit tool. Hash anchors detect stale context; text matching does not.",
 			"Workflow: hledit read → get anchors → hledit edit (single) or hledit batch (multiple).",
@@ -72,17 +77,31 @@ export default function piHleditExtension(pi: ExtensionAPI) {
 			}),
 			path: Type.String({ description: "File path" }),
 			// Read params
-			offset: Type.Optional(Type.Number({ description: "1-indexed starting line" })),
+			offset: Type.Optional(
+				Type.Number({ description: "1-indexed starting line" }),
+			),
 			limit: Type.Optional(Type.Number({ description: "Max lines to return" })),
-			grep: Type.Optional(Type.String({ description: "Filter lines by substring" })),
+			grep: Type.Optional(
+				Type.String({ description: "Filter lines by substring" }),
+			),
 			// Edit params
-			anchor: Type.Optional(Type.String({ description: "LN#HASH anchor, e.g. 12#NK" })),
-			end_anchor: Type.Optional(Type.String({ description: "End anchor for replace_range" })),
-			content: Type.Optional(Type.String({ description: "Replacement content; empty = delete" })),
-			after: Type.Optional(Type.Boolean({ description: "Insert after anchor instead of before" })),
+			anchor: Type.Optional(
+				Type.String({ description: "LN#HASH anchor, e.g. 12#NK" }),
+			),
+			end_anchor: Type.Optional(
+				Type.String({ description: "End anchor for replace_range" }),
+			),
+			content: Type.Optional(
+				Type.String({ description: "Replacement content; empty = delete" }),
+			),
+			after: Type.Optional(
+				Type.Boolean({ description: "Insert after anchor instead of before" }),
+			),
 			// Batch params (JSON array of {op, pos, end_pos?, lines?})
 			edits: Type.Optional(
-				Type.String({ description: "JSON array of edit ops: [{op,pos,end_pos?,lines?}]" }),
+				Type.String({
+					description: "JSON array of edit ops: [{op,pos,end_pos?,lines?}]",
+				}),
 			),
 		}),
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -92,12 +111,16 @@ export default function piHleditExtension(pi: ExtensionAPI) {
 				const offset = toNum(params.offset as number | undefined);
 				const limit = toNum(params.limit as number | undefined);
 				const grep = (params.grep as string) || undefined;
-				const hasRange = offset !== undefined || limit !== undefined || grep !== undefined;
+				const hasRange =
+					offset !== undefined || limit !== undefined || grep !== undefined;
 				const args = hasRange
 					? [
-							"read-range", path,
-							"--offset", String(offset ?? 1),
-							"--limit", String(limit ?? 2000),
+							"read-range",
+							path,
+							"--offset",
+							String(offset ?? 1),
+							"--limit",
+							String(limit ?? 2000),
 							...(grep ? ["--grep", grep] : []),
 						]
 					: ["read", path];
@@ -121,13 +144,17 @@ export default function piHleditExtension(pi: ExtensionAPI) {
 				return textResult(await runHledit(args, content, ctx));
 			}
 
-if (op === "batch") {
+			if (op === "batch") {
 				let edits: string;
 				try {
-						edits = params.edits as string;
-						JSON.parse(edits); // validate
+					edits = params.edits as string;
+					JSON.parse(edits); // validate
 				} catch {
-						return { content: [{ type: "text" as const, text: "invalid edits JSON" }], details: { ok: false }, isError: true };
+					return {
+						content: [{ type: "text" as const, text: "invalid edits JSON" }],
+						details: { ok: false },
+						isError: true,
+					};
 				}
 				return textResult(await runHledit(["batch", path], edits, ctx));
 			}

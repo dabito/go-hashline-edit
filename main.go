@@ -6,6 +6,8 @@ import (
 	"os"
 )
 
+const version = "0.1.0"
+
 // splitArgs separates a command's args into flags and positionals so that
 // flags may appear before OR after the positional file argument (e.g.
 // "read-range main.go --offset 4" and "read-range --offset 4 main.go" both
@@ -35,6 +37,7 @@ func splitArgs(args []string) (positionals []string, flags []string) {
 const usage = `hledit — hash-anchored line editor for AI coding agents
 
 Usage:
+  hledit --version
   hledit read <file>
   hledit read-range <file> [--offset N] [--limit M] [--grep <pattern>]
   hledit replace <file> <anchor> <content-source>
@@ -78,6 +81,12 @@ func main() {
 func run(argv []string) int {
 	if len(argv) < 1 {
 		fmt.Print(usage)
+		return 0
+	}
+
+	// Handle --version globally
+	if argv[0] == "--version" || argv[0] == "-v" {
+		fmt.Printf("hledit %s\n", version)
 		return 0
 	}
 
@@ -137,6 +146,10 @@ func run(argv []string) int {
 			return 2
 		}
 		return mustRun(cmdBatch(args[0]))
+
+	case "version":
+		fmt.Printf("hledit %s\n", version)
+		return 0
 
 	case "-h", "--help", "help":
 		fmt.Print(usage)
