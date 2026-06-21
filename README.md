@@ -1,4 +1,4 @@
-# go-hashline-edit
+# hledit
 
 `hledit` is a tiny hash-anchored line editor for AI coding agents.
 
@@ -29,7 +29,7 @@ make install LOCAL_BIN="$HOME/bin"
 Or use standard Go install:
 
 ```bash
-go install github.com/dabito/go-hashline-edit@latest
+go install github.com/dabito/hledit@latest
 ```
 
 Build without installing:

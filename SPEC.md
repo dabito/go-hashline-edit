@@ -1,4 +1,4 @@
-# go-hashline-edit — Spec
+# hledit — Spec
 
 ## 1. Binary & Invocation
 
@@ -70,6 +70,7 @@ hledit replace <file> <anchor> <content-source>
 - If content has multiple lines, the single targeted line is replaced with all of them (net insert).
 
 **Behavior:**
+
 1. Validate anchor against current file.
 2. If hash mismatches, return stale error (see §5).
 3. Replace the line at `LN` with the new content.
@@ -87,6 +88,7 @@ hledit replace-range <file> <anchor> <end-anchor> <content-source>
 - If content is empty, the range is **deleted**.
 
 **Validation:**
+
 - `anchor.Line <= end-anchor.Line`.
 - Both anchors must match current file hashes.
 
@@ -102,6 +104,7 @@ hledit insert [--before|--after] <file> <anchor> <content-source>
 - Content must be non-empty.
 
 **Behavior:**
+
 1. Validate anchor against current file.
 2. Insert new lines at the specified position.
 3. Write atomically.
