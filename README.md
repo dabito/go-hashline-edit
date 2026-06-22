@@ -14,6 +14,38 @@ Write commands reference anchors such as `6#MX`. Before changing the file, `hled
 
 ## Install
 
+`hledit` is a standalone CLI. You do not need Pi or `pi-hledit` to use it.
+
+### Option 1: install with Go
+
+```bash
+go install github.com/dabito/hledit@latest
+```
+
+Go installs the binary into `$GOBIN`, or `$GOPATH/bin` when `GOBIN` is unset. For a default Go setup, that is usually:
+
+```text
+$HOME/go/bin/hledit
+```
+
+Make sure that directory is on your shell `PATH`:
+
+```bash
+export PATH="$HOME/go/bin:$PATH"
+hledit --version
+```
+
+If you prefer tools to find `hledit` in `~/.local/bin`, create a symlink:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+ln -sf "$HOME/go/bin/hledit" "$HOME/.local/bin/hledit"
+```
+
+The symlink is optional for normal CLI use if `$HOME/go/bin` is already on `PATH`, but it is useful for integrations that look in `~/.local/bin` by default.
+
+### Option 2: build from source
+
 For local development, build into `dist/` and symlink into `~/.local/bin`:
 
 ```bash
@@ -26,12 +58,6 @@ Override the target bin directory if needed:
 make install LOCAL_BIN="$HOME/bin"
 ```
 
-Or use standard Go install:
-
-```bash
-go install github.com/dabito/hledit@latest
-```
-
 Build without installing:
 
 ```bash
@@ -39,26 +65,26 @@ make build
 # writes dist/hledit
 ```
 
-## Pi integration
+## Optional Pi integration
 
-The pi extension is extracted to [dabito/pi-hledit](https://github.com/dabito/pi-hledit).
+The Pi extension is a separate package: [`pi-hledit`](https://github.com/dabito/pi-hledit). It wraps this CLI but is not required to use `hledit` directly.
 
-Install:
+Install the extension after installing the CLI:
 
 ```bash
-pi install git:github.com/dabito/pi-hledit
+pi install npm:pi-hledit
 ```
 
-Reload pi:
+Reload Pi:
 
 ```text
 /reload
 ```
 
-The extension registers a single `hledit` tool with `op` parameter (read/edit/batch). It uses `~/.local/bin/hledit` by default. Override with:
+The extension registers a single `hledit` tool with an `op` parameter (`read`, `edit`, `batch`). It uses `~/.local/bin/hledit` by default. If your binary lives elsewhere, either keep that directory on Pi's `PATH` or set:
 
 ```bash
-export HLEDIT_BIN=/path/to/hledit
+export HLEDIT_BIN="$HOME/go/bin/hledit"
 ```
 
 ## Commands
