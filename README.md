@@ -100,14 +100,15 @@ export HLEDIT_BIN="$HOME/go/bin/hledit"
 ## Commands
 
 ```text
-hledit read <file>
-hledit read-range <file> [--offset N] [--limit M]
+hledit read <file> [--grep pattern] [--context N]
+hledit read-range <file> [--offset N] [--limit M] [--grep pattern] [--context N]
 hledit replace <file> <anchor> <content-source>
 hledit replace-range <file> <anchor> <end-anchor> <content-source>
 hledit insert [--before|--after] <file> <anchor> <content-source>
 hledit batch <file>
 ```
 
+`--grep` matches substrings. `--context N` adds N lines before/after each match.
 `<content-source>` is either `-` for stdin or a file path.
 
 ## Examples

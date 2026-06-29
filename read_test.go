@@ -59,7 +59,7 @@ func TestCmdReadAnnotatesSmallFile(t *testing.T) {
 	path := readTestWriteFile(t, dir, "small.txt", "alpha\nbeta\n")
 
 	output := readTestCaptureStdout(t, func() {
-		if err := cmdRead(path); err != nil {
+		if err := cmdRead(path, "", 0); err != nil {
 			t.Fatalf("cmdRead returned error: %v", err)
 		}
 	})
@@ -84,7 +84,7 @@ func TestCmdReadDropsTrailingPhantomEmptyLine(t *testing.T) {
 	path := readTestWriteFile(t, dir, "trailing-newline.txt", "solo\n")
 
 	output := readTestCaptureStdout(t, func() {
-		if err := cmdRead(path); err != nil {
+		if err := cmdRead(path, "", 0); err != nil {
 			t.Fatalf("cmdRead returned error: %v", err)
 		}
 	})
@@ -104,7 +104,7 @@ func TestCmdReadMissingFileEmitsIOErrorJSON(t *testing.T) {
 	path := filepath.Join(dir, "missing.txt")
 
 	output := readTestCaptureStdout(t, func() {
-		if err := cmdRead(path); err != nil {
+		if err := cmdRead(path, "", 0); err != nil {
 			t.Fatalf("cmdRead returned error: %v", err)
 		}
 	})
@@ -126,7 +126,7 @@ func TestCmdReadBinaryDetectionEmitsJSONError(t *testing.T) {
 	path := readTestWriteFile(t, dir, "binary.bin", string([]byte{'a', 0x00, 'b', '\n'}))
 
 	output := readTestCaptureStdout(t, func() {
-		if err := cmdRead(path); err != nil {
+		if err := cmdRead(path, "", 0); err != nil {
 			t.Fatalf("cmdRead returned error: %v", err)
 		}
 	})
@@ -152,7 +152,7 @@ func TestCmdReadTruncatesAfterTwoThousandLines(t *testing.T) {
 	path := readTestWriteFile(t, dir, "many-lines.txt", b.String())
 
 	output := readTestCaptureStdout(t, func() {
-		if err := cmdRead(path); err != nil {
+		if err := cmdRead(path, "", 0); err != nil {
 			t.Fatalf("cmdRead returned error: %v", err)
 		}
 	})
@@ -177,7 +177,7 @@ func TestCmdReadRangeUsesAbsoluteLineNumbersAndExactRange(t *testing.T) {
 	path := readTestWriteFile(t, dir, "range.txt", "one\ntwo\nthree\nfour\nfive\n")
 
 	output := readTestCaptureStdout(t, func() {
-		if err := cmdReadRange(path, 2, 2, ""); err != nil {
+		if err := cmdReadRange(path, 2, 2, "", 0); err != nil {
 			t.Fatalf("cmdReadRange returned error: %v", err)
 		}
 	})
@@ -202,7 +202,7 @@ func TestCmdReadRangeOffsetLessThanOneIsTreatedAsOne(t *testing.T) {
 	path := readTestWriteFile(t, dir, "offset0.txt", "first\nsecond\n")
 
 	output := readTestCaptureStdout(t, func() {
-		if err := cmdReadRange(path, 0, 1, ""); err != nil {
+		if err := cmdReadRange(path, 0, 1, "", 0); err != nil {
 			t.Fatalf("cmdReadRange returned error: %v", err)
 		}
 	})
@@ -225,7 +225,7 @@ func TestCmdReadRangeOffsetBeyondFileLengthEmitsRangeError(t *testing.T) {
 	path := readTestWriteFile(t, dir, "range-error.txt", "one\ntwo\n")
 
 	output := readTestCaptureStdout(t, func() {
-		if err := cmdReadRange(path, 3, 1, ""); err != nil {
+		if err := cmdReadRange(path, 3, 1, "", 0); err != nil {
 			t.Fatalf("cmdReadRange returned error: %v", err)
 		}
 	})
@@ -254,7 +254,7 @@ func TestCmdReadTruncatesAt50KBByteLimit(t *testing.T) {
 	path := readTestWriteFile(t, dir, "big-lines.txt", b.String())
 
 	output := readTestCaptureStdout(t, func() {
-		if err := cmdRead(path); err != nil {
+		if err := cmdRead(path, "", 0); err != nil {
 			t.Fatalf("cmdRead returned error: %v", err)
 		}
 	})
@@ -272,5 +272,168 @@ func TestCmdReadTruncatesAt50KBByteLimit(t *testing.T) {
 	// Verify the output byte size is near the 50 KB limit
 	if len(output) > 50*1024+1024 {
 		t.Fatalf("cmdRead output size = %d; expected near 50 KB", len(output))
+	}
+}
+
+// five-line fixture used by grep/context tests.
+const grepFixture = "alpha\nbeta\nmatch-me\ndelta\nepsilon\n"
+
+func TestCmdReadGrep(t *testing.T) {
+	dir := t.TempDir()
+	path := readTestWriteFile(t, dir, "grep.txt", grepFixture)
+
+	output := readTestCaptureStdout(t, func() {
+		if err := cmdRead(path, "match", 0); err != nil {
+			t.Fatalf("cmdRead returned error: %v", err)
+		}
+	})
+
+	got := readTestLines(t, output)
+	if len(got) != 1 {
+		t.Fatalf("cmdRead --grep output line count = %d; want 1 (%q)", len(got), output)
+	}
+	want := formatTag(3, "match-me") + ":match-me"
+	if got[0] != want {
+		t.Fatalf("cmdRead --grep line = %q; want %q", got[0], want)
+	}
+}
+
+func TestCmdReadGrepNoMatch(t *testing.T) {
+	dir := t.TempDir()
+	path := readTestWriteFile(t, dir, "grep-nomatch.txt", grepFixture)
+
+	output := readTestCaptureStdout(t, func() {
+		if err := cmdRead(path, "zzz-no-match", 0); err != nil {
+			t.Fatalf("cmdRead returned error: %v", err)
+		}
+	})
+
+	got := readTestLines(t, output)
+	if got != nil {
+		t.Fatalf("cmdRead --grep no-match expected empty output; got %q", output)
+	}
+}
+
+func TestCmdReadGrepContext(t *testing.T) {
+	dir := t.TempDir()
+	path := readTestWriteFile(t, dir, "ctx.txt", grepFixture)
+
+	output := readTestCaptureStdout(t, func() {
+		if err := cmdRead(path, "match", 1); err != nil {
+			t.Fatalf("cmdRead returned error: %v", err)
+		}
+	})
+
+	got := readTestLines(t, output)
+	// match on line 3, context=1 → lines 2,3,4
+	if len(got) != 3 {
+		t.Fatalf("cmdRead --grep --context=1 line count = %d; want 3 (%q)", len(got), output)
+	}
+	wantLines := []struct {
+		num  int
+		text string
+	}{
+		{2, "beta"},
+		{3, "match-me"},
+		{4, "delta"},
+	}
+	for i, w := range wantLines {
+		want := formatTag(w.num, w.text) + ":" + w.text
+		if got[i] != want {
+			t.Fatalf("cmdRead context line[%d] = %q; want %q", i, got[i], want)
+		}
+	}
+}
+
+func TestCmdReadGrepContextClampsToBounds(t *testing.T) {
+	dir := t.TempDir()
+	// match on line 1, context=5 should not go below line 1
+	path := readTestWriteFile(t, dir, "clamp.txt", "match-me\nbeta\ngamma\n")
+
+	output := readTestCaptureStdout(t, func() {
+		if err := cmdRead(path, "match", 5); err != nil {
+			t.Fatalf("cmdRead returned error: %v", err)
+		}
+	})
+
+	got := readTestLines(t, output)
+	// all 3 lines should appear (context extends to end)
+	if len(got) != 3 {
+		t.Fatalf("cmdRead clamp line count = %d; want 3 (%q)", len(got), output)
+	}
+	if got[0] != formatTag(1, "match-me")+":match-me" {
+		t.Fatalf("cmdRead clamp first line = %q; want line 1", got[0])
+	}
+}
+
+func TestCmdReadRangeGrepContext(t *testing.T) {
+	dir := t.TempDir()
+	// 7-line file; match on line 5, context=1 → lines 4,5,6
+	content := "one\ntwo\nthree\nfour\nmatch-me\nsix\nseven\n"
+	path := readTestWriteFile(t, dir, "rr-ctx.txt", content)
+
+	output := readTestCaptureStdout(t, func() {
+		if err := cmdReadRange(path, 1, 2000, "match", 1); err != nil {
+			t.Fatalf("cmdReadRange returned error: %v", err)
+		}
+	})
+
+	got := readTestLines(t, output)
+	if len(got) != 3 {
+		t.Fatalf("cmdReadRange --grep --context=1 line count = %d; want 3 (%q)", len(got), output)
+	}
+	wantLines := []struct {
+		num  int
+		text string
+	}{
+		{4, "four"},
+		{5, "match-me"},
+		{6, "six"},
+	}
+	for i, w := range wantLines {
+		want := formatTag(w.num, w.text) + ":" + w.text
+		if got[i] != want {
+			t.Fatalf("cmdReadRange context line[%d] = %q; want %q", i, got[i], want)
+		}
+	}
+}
+func TestCmdReadRangeGrepOffsetAfterLastMatch(t *testing.T) {
+	dir := t.TempDir()
+	path := readTestWriteFile(t, dir, "rr-offset-after.txt", grepFixture)
+
+	output := readTestCaptureStdout(t, func() {
+		if err := cmdReadRange(path, 5, 2000, "match", 1); err != nil {
+			t.Fatalf("cmdReadRange returned error: %v", err)
+		}
+	})
+
+	if output != "" {
+		t.Fatalf("cmdReadRange --grep offset after last match output = %q; want empty", output)
+	}
+}
+func TestApplyContextOverlappingWindows(t *testing.T) {
+	// 10 lines; matches at 3 and 6, context=2
+	// window for 3: lines 1-5; window for 6: lines 4-8 → merged: 1-8
+	lines := []string{"L1", "L2", "L3hit", "L4", "L5", "L6hit", "L7", "L8", "L9", "L10"}
+	matchIdxs := []int{3, 6}
+	got := applyContext(lines, matchIdxs, 2)
+
+	want := []int{1, 2, 3, 4, 5, 6, 7, 8}
+	if len(got) != len(want) {
+		t.Fatalf("applyContext overlap len = %d; want %d (%v)", len(got), len(want), got)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Fatalf("applyContext overlap[%d] = %d; want %d", i, got[i], w)
+		}
+	}
+}
+
+func TestApplyContextZeroIsNoop(t *testing.T) {
+	lines := []string{"a", "b", "c"}
+	matchIdxs := []int{2}
+	got := applyContext(lines, matchIdxs, 0)
+	if len(got) != 1 || got[0] != 2 {
+		t.Fatalf("applyContext context=0 should be noop, got %v", got)
 	}
 }

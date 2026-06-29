@@ -58,6 +58,38 @@ func filterLines(lines []string, pattern string) []int {
 	return matches
 }
 
+// applyContext expands matchIdxs by including up to contextN lines before and
+// after each match. Overlapping windows are merged. Returns a sorted,
+// deduplicated slice of 1-indexed line numbers. If contextN <= 0 or matchIdxs
+// is empty the original slice is returned unchanged.
+func applyContext(lines []string, matchIdxs []int, contextN int) []int {
+	if contextN <= 0 || len(matchIdxs) == 0 {
+		return matchIdxs
+	}
+	total := len(lines)
+	included := make([]bool, total+1) // 1-indexed; index 0 unused
+	for _, ln := range matchIdxs {
+		start := ln - contextN
+		if start < 1 {
+			start = 1
+		}
+		end := ln + contextN
+		if end > total {
+			end = total
+		}
+		for i := start; i <= end; i++ {
+			included[i] = true
+		}
+	}
+	result := make([]int, 0, len(matchIdxs))
+	for i := 1; i <= total; i++ {
+		if included[i] {
+			result = append(result, i)
+		}
+	}
+	return result
+}
+
 // emitAnnotatedLines writes LN#HASH:content lines to a buffer with truncation.
 // Returns the number of content lines emitted.
 func emitAnnotatedLines(buf *bytes.Buffer, lines []string, startIdx, maxLines, maxBytes int) int {
@@ -84,7 +116,7 @@ func emitAnnotatedLines(buf *bytes.Buffer, lines []string, startIdx, maxLines, m
 // emitMatchLines writes only matching LN#HASH:content lines with pagination info.
 // matchIdxs are 1-indexed line numbers into lines.
 func emitMatchLines(buf *bytes.Buffer, lines []string, matchIdxs []int, offset, maxLines int) {
-	startIdx := 0
+	startIdx := len(matchIdxs)
 	for i, ln := range matchIdxs {
 		if ln >= offset {
 			startIdx = i
@@ -108,19 +140,25 @@ func emitMatchLines(buf *bytes.Buffer, lines []string, matchIdxs []int, offset, 
 	}
 }
 
-func cmdRead(path string) error {
+func cmdRead(path, grep string, contextN int) error {
 	lines, errored := readFileLines(path)
 	if errored {
 		return nil
 	}
 
 	var buf bytes.Buffer
-	emitAnnotatedLines(&buf, lines, 0, 2000, 50*1024)
+	matchIdxs := filterLines(lines, grep)
+	if matchIdxs != nil {
+		matchIdxs = applyContext(lines, matchIdxs, contextN)
+		emitMatchLines(&buf, lines, matchIdxs, 1, 2000)
+	} else {
+		emitAnnotatedLines(&buf, lines, 0, 2000, 50*1024)
+	}
 	fmt.Print(buf.String())
 	return nil
 }
 
-func cmdReadRange(path string, offset, limit int, grep string) error {
+func cmdReadRange(path string, offset, limit int, grep string, contextN int) error {
 	lines, errored := readFileLines(path)
 	if errored {
 		return nil
@@ -143,7 +181,7 @@ func cmdReadRange(path string, offset, limit int, grep string) error {
 
 	matchIdxs := filterLines(lines, grep)
 	if matchIdxs != nil {
-		// Build annotated lines only for matches
+		matchIdxs = applyContext(lines, matchIdxs, contextN)
 		emitMatchLines(&buf, lines, matchIdxs, offset, maxLines)
 	} else {
 		emitAnnotatedLines(&buf, lines, offset-1, maxLines, 50*1024)

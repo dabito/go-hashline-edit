@@ -14,7 +14,7 @@ hledit <verb> [flags] <file> [anchor] [end-anchor] <content-source>
 ### 2.1 `read`
 
 ```
-hledit read <file>
+hledit read <file> [--grep <pattern>] [--context N]
 ```
 
 Reads the entire file. Each line is emitted as:
@@ -27,6 +27,8 @@ Reads the entire file. Each line is emitted as:
 - `HH` — 2-character hash (see §3).
 - `:` — literal separator.
 - Content includes the original line without trailing `\n` or `\r`.
+- `--grep` — substring match; only matching lines are emitted.
+- `--context` — include N lines before/after each match; overlapping windows merge.
 
 **Truncation:** Stop at 50 KB of output or 2,000 lines, whichever is first. Append a trailing line:
 
@@ -43,11 +45,13 @@ Reads the entire file. Each line is emitted as:
 ### 2.2 `read-range`
 
 ```
-hledit read-range <file> --offset <N> --limit <M>
+hledit read-range <file> [--offset <N>] [--limit <M>] [--grep <pattern>] [--context N]
 ```
 
 - `--offset` — 1-indexed starting line (default 1).
 - `--limit` — max lines to return (default 2000).
+- `--grep` — substring match; only matching lines are emitted.
+- `--context` — include N lines before/after each match; overlapping windows merge.
 
 Same output format as `read`. Same truncation behavior at 50 KB / 2,000 lines from the offset.
 

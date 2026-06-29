@@ -15,7 +15,7 @@ const version = "1.0.3"
 // A bare "-" is treated as a positional (stdin content-source).
 func splitArgs(args []string) (positionals []string, flags []string) {
 	// Flags that take a value ("-x v" form) in our subcommands.
-	valueFlags := map[string]bool{"-offset": true, "--offset": true, "-limit": true, "--limit": true, "-grep": true, "--grep": true}
+	valueFlags := map[string]bool{"-offset": true, "--offset": true, "-limit": true, "--limit": true, "-grep": true, "--grep": true, "-context": true, "--context": true}
 	boolFlags := map[string]bool{"--before": true, "--after": true}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -48,8 +48,8 @@ const usage = `hledit — hash-anchored line editor for AI coding agents
 
 Usage:
   hledit --version
-  hledit read <file>
-  hledit read-range <file> [--offset N] [--limit M] [--grep <pattern>]
+  hledit read <file> [--grep <pattern>] [--context N]
+  hledit read-range <file> [--offset N] [--limit M] [--grep <pattern>] [--context N]
   hledit replace <file> <anchor> <content-source>
   hledit replace-range <file> <anchor> <end-anchor> <content-source>
   hledit insert [--before|--after] <file> <anchor> <content-source>
@@ -106,11 +106,16 @@ func run(argv []string) int {
 
 	switch verb {
 	case "read":
-		if len(args) != 1 {
+		positionals, flagArgs := splitArgs(args)
+		fs := flag.NewFlagSet("read", flag.ExitOnError)
+		grep := fs.String("grep", "", "filter lines by substring match")
+		contextN := fs.Int("context", 0, "include N surrounding lines for each grep match")
+		fs.Parse(flagArgs)
+		if len(positionals) != 1 {
 			fmt.Fprint(os.Stderr, usage)
 			return 2
 		}
-		return mustRun(cmdRead(args[0]))
+		return mustRun(cmdRead(positionals[0], *grep, *contextN))
 
 	case "read-range":
 		positionals, flagArgs := splitArgs(args)
@@ -118,12 +123,13 @@ func run(argv []string) int {
 		offset := fs.Int("offset", 1, "1-indexed starting line")
 		limit := fs.Int("limit", 2000, "max lines to return")
 		grep := fs.String("grep", "", "filter lines by substring match")
+		contextN := fs.Int("context", 0, "include N surrounding lines for each grep match")
 		fs.Parse(flagArgs)
 		if len(positionals) != 1 {
 			fmt.Fprint(os.Stderr, usage)
 			return 2
 		}
-		return mustRun(cmdReadRange(positionals[0], *offset, *limit, *grep))
+		return mustRun(cmdReadRange(positionals[0], *offset, *limit, *grep, *contextN))
 
 	case "replace":
 		if len(args) != 3 {
