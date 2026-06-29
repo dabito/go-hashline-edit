@@ -218,6 +218,99 @@ func cmdRead(path, grep string, contextN int, jsonOut bool) error {
 	return nil
 }
 
+// emitAnchorLines writes ANCHOR\tTEXT lines (completion-friendly) with truncation.
+func emitAnchorLines(buf *bytes.Buffer, lines []string, startIdx, maxLines, maxBytes int) {
+	emittedCount := 0
+	for i := startIdx; i < len(lines); i++ {
+		lineNum := i + 1
+		line := lines[i]
+		tag := formatTag(lineNum, line)
+		lineStr := tag + "\t" + line + "\n"
+
+		buf.WriteString(lineStr)
+		emittedCount++
+
+		if emittedCount >= maxLines || buf.Len() >= maxBytes {
+			if i < len(lines)-1 {
+				buf.WriteString(fmt.Sprintf("-- truncated: use anchors --offset %d --\n", i+2))
+			}
+			break
+		}
+	}
+}
+
+// emitAnchorMatchLines writes matching ANCHOR\tTEXT lines with pagination notice.
+func emitAnchorMatchLines(buf *bytes.Buffer, lines []string, matchIdxs []int, offset, maxLines int) {
+	startIdx := len(matchIdxs)
+	for i, ln := range matchIdxs {
+		if ln >= offset {
+			startIdx = i
+			break
+		}
+	}
+
+	count := 0
+	for i := startIdx; i < len(matchIdxs) && count < maxLines; i++ {
+		ln := matchIdxs[i]
+		line := lines[ln-1]
+		tag := formatTag(ln, line)
+		buf.WriteString(tag + "\t" + line + "\n")
+		count++
+	}
+
+	remaining := len(matchIdxs) - startIdx - count
+	if remaining > 0 {
+		lastLn := matchIdxs[startIdx+count-1]
+		buf.WriteString(fmt.Sprintf("-- %d more matches, use offset %d --\n", remaining, lastLn+1))
+	}
+}
+
+func cmdAnchors(path string, offset, limit int, grep string, contextN int, jsonOut bool) error {
+	lines, errored := readFileLines(path)
+	if errored {
+		return nil
+	}
+
+	if offset < 1 {
+		offset = 1
+	}
+	if offset > len(lines) {
+		emitError("range", fmt.Sprintf("offset %d exceeds file length %d", offset, len(lines)))
+		return nil
+	}
+
+	maxLines := limit
+	if maxLines <= 0 {
+		maxLines = 2000
+	}
+
+	matchIdxs := filterLines(lines, grep)
+
+	if jsonOut {
+		var readLines []ReadLine
+		var truncated bool
+		var nextOffset int
+		if matchIdxs != nil {
+			matchIdxs = applyContext(lines, matchIdxs, contextN)
+			readLines, truncated, nextOffset = collectMatchLines(lines, matchIdxs, offset, maxLines)
+		} else {
+			readLines, truncated, nextOffset = collectAnnotatedLines(lines, offset-1, maxLines, 50*1024)
+		}
+		return emitJSON(ReadResult{OK: true, Lines: readLines, Truncated: truncated, NextOffset: nextOffset})
+	}
+
+	var buf bytes.Buffer
+	if matchIdxs != nil {
+		matchIdxs = applyContext(lines, matchIdxs, contextN)
+		emitAnchorMatchLines(&buf, lines, matchIdxs, offset, maxLines)
+	} else {
+		emitAnchorLines(&buf, lines, offset-1, maxLines, 50*1024)
+	}
+
+	fmt.Print(buf.String())
+	return nil
+}
+
 func cmdReadRange(path string, offset, limit int, grep string, contextN int, jsonOut bool) error {
 	lines, errored := readFileLines(path)
 	if errored {

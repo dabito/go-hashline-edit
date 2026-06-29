@@ -50,6 +50,7 @@ Usage:
   hledit --version
   hledit read <file> [--grep <pattern>] [--context N] [--json]
   hledit read-range <file> [--offset N] [--limit M] [--grep <pattern>] [--context N] [--json]
+  hledit anchors <file> [--offset N] [--limit M] [--grep <pattern>] [--context N] [--json]
   hledit replace <file> <anchor> <content-source>
   hledit replace-range <file> <anchor> <end-anchor> <content-source>
   hledit insert [--before|--after] <file> <anchor> <content-source>
@@ -132,6 +133,21 @@ func run(argv []string) int {
 			return 2
 		}
 		return mustRun(cmdReadRange(positionals[0], *offset, *limit, *grep, *contextN, *jsonOut))
+
+	case "anchors":
+		positionals, flagArgs := splitArgs(args)
+		fs := flag.NewFlagSet("anchors", flag.ExitOnError)
+		offset := fs.Int("offset", 1, "1-indexed starting line")
+		limit := fs.Int("limit", 2000, "max lines to return")
+		grep := fs.String("grep", "", "filter lines by substring match")
+		contextN := fs.Int("context", 0, "include N surrounding lines for each grep match")
+		jsonOut := fs.Bool("json", false, "emit structured JSON instead of annotated text")
+		fs.Parse(flagArgs)
+		if len(positionals) != 1 {
+			fmt.Fprint(os.Stderr, usage)
+			return 2
+		}
+		return mustRun(cmdAnchors(positionals[0], *offset, *limit, *grep, *contextN, *jsonOut))
 
 	case "replace":
 		if len(args) != 3 {

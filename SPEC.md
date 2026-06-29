@@ -63,7 +63,24 @@ If `--offset` exceeds file length, emit:
 { "ok": false, "error": "range", "message": "offset 500 exceeds file length 120" }
 ```
 
-### 2.3 `replace`
+### 2.3 `anchors`
+
+```
+hledit anchors <file> [--offset <N>] [--limit <M>] [--grep <pattern>] [--context N] [--json]
+```
+
+- Same flags and filtering as `read-range`.
+- Emits `ANCHOR<TAB>TEXT` instead of `LN#HH:TEXT`.
+- Same truncation behavior at 50 KB / 2,000 lines from the offset.
+- `--json` — same JSON shape.
+
+If `--offset` exceeds file length, emit:
+
+```json
+{ "ok": false, "error": "range", "message": "offset 500 exceeds file length 120" }
+```
+
+### 2.4 `replace`
 
 ```
 hledit replace <file> <anchor> <content-source>
@@ -82,7 +99,7 @@ hledit replace <file> <anchor> <content-source>
 3. Replace the line at `LN` with the new content.
 4. Write atomically (temp + rename).
 
-### 2.4 `replace-range`
+### 2.5 `replace-range`
 
 ```
 hledit replace-range <file> <anchor> <end-anchor> <content-source>
@@ -98,7 +115,7 @@ hledit replace-range <file> <anchor> <end-anchor> <content-source>
 - `anchor.Line <= end-anchor.Line`.
 - Both anchors must match current file hashes.
 
-### 2.5 `insert`
+### 2.6 `insert`
 
 ```
 hledit insert [--before|--after] <file> <anchor> <content-source>
@@ -115,7 +132,7 @@ hledit insert [--before|--after] <file> <anchor> <content-source>
 2. Insert new lines at the specified position.
 3. Write atomically.
 
-### 2.6 `batch`
+### 2.7 `batch`
 
 ```
 hledit batch <file>
@@ -146,7 +163,6 @@ Application:
 
 - Edits are applied bottom-up by original `pos.Line`.
 - The file is written once, atomically, only after the full batch validates.
-
 ## 3. Hash Algorithm
 
 ```
@@ -263,7 +279,7 @@ Exit code 1 is only for infrastructure failures. All logical errors (stale, inva
 ```
 .
 ├── main.go          # Entry point, CLI dispatch
-├── read.go          # read + read-range verbs
+├── read.go          # read + read-range + anchors verbs
 ├── edit.go          # replace, replace-range, insert verbs
 ├── hash.go          # FNV-1a hash, nibble alphabet, formatTag
 ├── types.go         # Anchor, EditResult, EditError, response types
