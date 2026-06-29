@@ -135,10 +135,11 @@ hledit insert [--before|--after] <file> <anchor> <content-source>
 ### 2.7 `batch`
 
 ```
-hledit batch <file>
+hledit batch [--check] <file>
 ```
 
 Reads a JSON `BatchEditRequest` from stdin:
+`--check` validates stdin JSON, anchors, and ops without writing; success adds `checked:true`.
 
 ```json
 {
@@ -221,14 +222,13 @@ When any anchor's hash doesn't match the current file content:
 
 ## 6. Success Response
 
+Single writes may include `lastChangedLine`:
+
 ```json
-{
-  "ok": true,
-  "firstChangedLine": 5
-}
+{ "ok": true, "firstChangedLine": 5, "lastChangedLine": 5 }
 ```
 
-- `firstChangedLine` — the 1-indexed line number of the first line that was modified, inserted, or deleted. Useful for the agent to re-read from that point.
+Batch writes include `firstChangedLine`, `lastChangedLine`, `editsApplied`; `--check` also includes `checked:true`.
 
 ## 7. Content Source
 

@@ -106,7 +106,7 @@ hledit anchors <file> [--offset N] [--limit M] [--grep pattern] [--context N] [-
 hledit replace <file> <anchor> <content-source>
 hledit replace-range <file> <anchor> <end-anchor> <content-source>
 hledit insert [--before|--after] <file> <anchor> <content-source>
-hledit batch <file>
+hledit batch [--check] <file>
 ```
 
 `--grep` matches substrings. `--context N` adds N lines before/after each match.
@@ -148,6 +148,7 @@ Apply multiple edits atomically with JSON on stdin:
 
 ```bash
 printf '%s\n' '{"edits":[{"op":"replace","pos":"12#NK","end_pos":"18#VR","lines":["new block"]},{"op":"insert","pos":"22#VR","lines":["// inserted"]}]}' | hledit batch main.go
+echo '{"edits":[{"op":"replace","pos":"12#NK","lines":["fixed"]}]}' | hledit batch --check main.go
 ```
 Delete a line or range by piping empty stdin and using `-` as the content source:
 
@@ -170,7 +171,13 @@ Read emits `LN#HH:TEXT`; anchors emits `ANCHOR<TAB>TEXT`.
 Write commands emit JSON:
 
 ```json
-{"ok":true,"firstChangedLine":6}
+{"ok":true,"firstChangedLine":6,"lastChangedLine":6}
+```
+
+Batch adds `editsApplied`; `--check` also adds `checked:true`.
+
+```json
+{"ok":true,"firstChangedLine":2,"lastChangedLine":4,"editsApplied":2,"checked":true}
 ```
 
 Stale anchors are rejected atomically:

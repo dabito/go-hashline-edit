@@ -70,8 +70,8 @@ func emitJSONError(e EditError) error {
 	return emitJSON(e)
 }
 
-func emitResult(firstChanged int) error {
-	return emitJSON(EditResult{OK: true, FirstChangedLine: firstChanged})
+func emitResult(firstChanged, lastChanged int) error {
+	return emitJSON(EditResult{OK: true, FirstChangedLine: firstChanged, LastChangedLine: lastChanged})
 }
 
 func emitStaleError(remaps []Remap, msg string) error {
@@ -111,7 +111,7 @@ func editOp(
 	path string,
 	anchors []Anchor,
 	contentSrc string,
-	apply func(lines []string, newLines []string) (result []string, firstChanged int, err error),
+	apply func(lines []string, newLines []string) (result []string, firstChanged int, lastChanged int, err error),
 ) error {
 	lines, err := loadFileLines(path)
 	if err != nil {
@@ -137,7 +137,7 @@ func editOp(
 		return nil
 	}
 
-	result, firstChanged, aerr := apply(lines, newLines)
+	result, firstChanged, lastChanged, aerr := apply(lines, newLines)
 	if aerr != nil {
 		emitInvalidError(aerr.Error())
 		return nil
@@ -150,7 +150,7 @@ func editOp(
 		return nil
 	}
 
-	emitResult(firstChanged)
+	emitResult(firstChanged, lastChanged)
 	return nil
 }
 
@@ -161,11 +161,11 @@ func cmdReplace(path, anchorStr, contentSrc string) error {
 		return nil
 	}
 
-	return editOp(path, []Anchor{a}, contentSrc, func(lines, newLines []string) ([]string, int, error) {
+	return editOp(path, []Anchor{a}, contentSrc, func(lines, newLines []string) ([]string, int, int, error) {
 		before := append([]string{}, lines[:a.Line-1]...)
 		result := append(before, newLines...)
 		result = append(result, lines[a.Line:]...)
-		return result, a.Line, nil
+		return result, a.Line, a.Line, nil
 	})
 }
 
@@ -185,12 +185,12 @@ func cmdReplaceRange(path, anchorStr, endAnchorStr, contentSrc string) error {
 		return nil
 	}
 
-	return editOp(path, []Anchor{a, e}, contentSrc, func(lines, newLines []string) ([]string, int, error) {
+	return editOp(path, []Anchor{a, e}, contentSrc, func(lines, newLines []string) ([]string, int, int, error) {
 		before := lines[:a.Line-1]
 		after := lines[e.Line:]
 		result := append(append([]string{}, before...), newLines...)
 		result = append(result, after...)
-		return result, a.Line, nil
+		return result, a.Line, e.Line, nil
 	})
 }
 
@@ -201,9 +201,9 @@ func cmdInsert(path, anchorStr, contentSrc string, after bool) error {
 		return nil
 	}
 
-	return editOp(path, []Anchor{a}, contentSrc, func(lines, newLines []string) ([]string, int, error) {
+	return editOp(path, []Anchor{a}, contentSrc, func(lines, newLines []string) ([]string, int, int, error) {
 		if len(newLines) == 0 {
-			return nil, 0, fmt.Errorf("insert requires non-empty content")
+			return nil, 0, 0, fmt.Errorf("insert requires non-empty content")
 		}
 		cutIdx := a.Line - 1
 		firstChanged := a.Line
@@ -214,7 +214,7 @@ func cmdInsert(path, anchorStr, contentSrc string, after bool) error {
 		result := append([]string{}, lines[:cutIdx]...)
 		result = append(result, newLines...)
 		result = append(result, lines[cutIdx:]...)
-		return result, firstChanged, nil
+		return result, firstChanged, firstChanged + len(newLines) - 1, nil
 	})
 }
 
@@ -222,7 +222,8 @@ func cmdInsert(path, anchorStr, contentSrc string, after bool) error {
 // All anchors are validated against the same file state, then edits are
 // applied bottom-up so earlier line numbers remain valid.
 // Input is a JSON BatchEditRequest on stdin.
-func cmdBatch(path string) error {
+// When checkOnly is true, all validation runs but the file is not written.
+func cmdBatch(path string, checkOnly bool) error {
 	req, err := parseBatchRequest()
 	if err != nil {
 		emitBatchInvalidError(fmt.Sprintf("invalid batch request: %s", err.Error()), -1)
@@ -354,13 +355,39 @@ func cmdBatch(path string) error {
 		return nil
 	}
 
+	// Compute firstChanged and lastChanged across all edits.
+	firstChanged := parsed[0].lineNum
+	lastChanged := 0
+	for _, e := range parsed {
+		if e.lineNum < firstChanged {
+			firstChanged = e.lineNum
+		}
+		end := e.lineNum
+		if e.op == "insert" {
+			end = e.lineNum + len(e.lines) - 1
+		} else if e.endPos != nil && e.endPos.Line > end {
+			end = e.endPos.Line
+		}
+		if end > lastChanged {
+			lastChanged = end
+		}
+	}
+
+	if checkOnly {
+		return emitJSON(BatchEditResult{
+			OK:               true,
+			FirstChangedLine: firstChanged,
+			LastChangedLine:  lastChanged,
+			EditsApplied:     len(parsed),
+			Checked:          true,
+		})
+	}
+
 	// Sort edits by line number descending (bottom-up) so earlier anchors
 	// remain valid after each application.
 	sort.SliceStable(parsed, func(i, j int) bool {
 		return parsed[i].lineNum > parsed[j].lineNum
 	})
-
-	firstChanged := parsed[0].lineNum
 
 	// Apply edits bottom-up
 	for _, e := range parsed {
@@ -384,10 +411,6 @@ func cmdBatch(path string) error {
 			emitBatchInvalidError(fmt.Sprintf("unknown op %q", e.op), -1)
 			return nil
 		}
-
-		if e.lineNum < firstChanged {
-			firstChanged = e.lineNum
-		}
 	}
 
 	hadTrailing := fileHasTrailingNewline(path)
@@ -400,6 +423,7 @@ func cmdBatch(path string) error {
 	return emitJSON(BatchEditResult{
 		OK:               true,
 		FirstChangedLine: firstChanged,
+		LastChangedLine:  lastChanged,
 		EditsApplied:     len(parsed),
 	})
 }

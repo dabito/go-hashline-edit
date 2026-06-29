@@ -31,6 +31,7 @@ type Remap struct {
 type EditResult struct {
 	OK               bool     `json:"ok"`
 	FirstChangedLine int      `json:"firstChangedLine,omitempty"`
+	LastChangedLine  int      `json:"lastChangedLine,omitempty"`
 	Warnings         []string `json:"warnings,omitempty"`
 }
 
@@ -61,10 +62,13 @@ type BatchEditRequest struct {
 }
 
 // BatchEditResult is written to stdout after a successful batch edit.
+// Checked is true when the batch was run with --check (validate-only, no write).
 type BatchEditResult struct {
 	OK               bool `json:"ok"`
 	FirstChangedLine int  `json:"firstChangedLine,omitempty"`
+	LastChangedLine  int  `json:"lastChangedLine,omitempty"`
 	EditsApplied     int  `json:"editsApplied"`
+	Checked          bool `json:"checked,omitempty"`
 }
 
 // BatchEditError is written to stdout when any anchor in the batch is stale.

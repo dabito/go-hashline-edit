@@ -16,7 +16,7 @@ const version = "1.0.3"
 func splitArgs(args []string) (positionals []string, flags []string) {
 	// Flags that take a value ("-x v" form) in our subcommands.
 	valueFlags := map[string]bool{"-offset": true, "--offset": true, "-limit": true, "--limit": true, "-grep": true, "--grep": true, "-context": true, "--context": true}
-	boolFlags := map[string]bool{"--before": true, "--after": true, "--json": true, "-json": true}
+	boolFlags := map[string]bool{"--before": true, "--after": true, "--json": true, "-json": true, "--check": true, "-check": true}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "-" {
@@ -54,7 +54,7 @@ Usage:
   hledit replace <file> <anchor> <content-source>
   hledit replace-range <file> <anchor> <end-anchor> <content-source>
   hledit insert [--before|--after] <file> <anchor> <content-source>
-  hledit batch <file>
+  hledit batch [--check] <file>
 
 Arguments:
   <anchor>          LN#HH from a prior read, e.g. 5#WS
@@ -76,11 +76,13 @@ Examples:
   cat header.txt | hledit insert --before main.go 1#WV -
   printf '// done\n' | hledit insert --after main.go 99#TX -
   echo '{"edits":[{"op":"replace","pos":"12#NK","lines":["fixed"]}]}' | hledit batch main.go
+  echo '{"edits":[{"op":"replace","pos":"12#NK","lines":["fixed"]}]}' | hledit batch --check main.go
 
 Notes:
   - replace/replace-range with empty content deletes the target line/range.
   - batch applies multiple edits atomically: all anchors validated first,
     then edits applied bottom-up, then a single atomic write.
+  - batch --check validates all anchors and ops without writing; result includes checked:true.
   - All write verbs validate anchors before writing. If any anchor is stale,
     nothing is written and stdout contains JSON {"ok":false,"error":"stale",...}.
   - Logical errors exit 0 and are reported as JSON on stdout; CLI misuse exits 2.
@@ -176,11 +178,15 @@ func run(argv []string) int {
 		return mustRun(cmdInsert(positionals[0], positionals[1], positionals[2], *after))
 
 	case "batch":
-		if len(args) != 1 {
+		positionals, flagArgs := splitArgs(args)
+		fs := flag.NewFlagSet("batch", flag.ExitOnError)
+		check := fs.Bool("check", false, "validate only, do not write")
+		fs.Parse(flagArgs)
+		if len(positionals) != 1 {
 			fmt.Fprint(os.Stderr, usage)
 			return 2
 		}
-		return mustRun(cmdBatch(args[0]))
+		return mustRun(cmdBatch(positionals[0], *check))
 
 	case "version":
 		fmt.Printf("hledit %s\n", version)

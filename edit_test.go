@@ -276,6 +276,54 @@ func TestCmdReplace(t *testing.T) {
 	})
 }
 
+func TestCmdReplaceLastChangedLine(t *testing.T) {
+	t.Run("single replace lastChangedLine equals firstChangedLine", func(t *testing.T) {
+		dir := t.TempDir()
+		target := editTestWriteLinesFile(t, dir, "target.txt", "alpha", "bravo", "charlie")
+		contentSrc := editTestWriteLinesFile(t, dir, "content.txt", "BRAVO")
+		anchor := formatTag(2, "bravo")
+
+		out := editTestCaptureStdout(t, func() {
+			_ = cmdReplace(target, anchor, contentSrc)
+		})
+
+		var got EditResult
+		editTestMustUnmarshal(t, out, &got)
+		if !got.OK {
+			t.Fatalf("cmdReplace failed: %#v", got)
+		}
+		if got.FirstChangedLine != 2 || got.LastChangedLine != 2 {
+			t.Fatalf("firstChangedLine=%d lastChangedLine=%d; want both 2", got.FirstChangedLine, got.LastChangedLine)
+		}
+	})
+}
+
+func TestCmdReplaceRangeLastChangedLine(t *testing.T) {
+	t.Run("replace range lastChangedLine reflects end anchor", func(t *testing.T) {
+		dir := t.TempDir()
+		target := editTestWriteLinesFile(t, dir, "target.txt", "alpha", "bravo", "charlie", "delta")
+		contentSrc := editTestWriteLinesFile(t, dir, "content.txt", "MIDDLE")
+		start := formatTag(2, "bravo")
+		end := formatTag(3, "charlie")
+
+		out := editTestCaptureStdout(t, func() {
+			_ = cmdReplaceRange(target, start, end, contentSrc)
+		})
+
+		var got EditResult
+		editTestMustUnmarshal(t, out, &got)
+		if !got.OK {
+			t.Fatalf("cmdReplaceRange failed: %#v", got)
+		}
+		if got.FirstChangedLine != 2 {
+			t.Fatalf("firstChangedLine = %d, want 2", got.FirstChangedLine)
+		}
+		if got.LastChangedLine != 3 {
+			t.Fatalf("lastChangedLine = %d, want 3", got.LastChangedLine)
+		}
+	})
+}
+
 func TestCmdReplaceBinaryDetectionEmitsJSONError(t *testing.T) {
 	t.Run("binary target returns binary JSON error", func(t *testing.T) {
 		dir := t.TempDir()
@@ -387,8 +435,8 @@ func TestCmdInsert(t *testing.T) {
 
 		var got EditResult
 		editTestMustUnmarshal(t, out, &got)
-		if !got.OK || got.FirstChangedLine != 2 {
-			t.Fatalf("cmdInsert output = %#v; want ok true firstChangedLine 2", got)
+		if !got.OK || got.FirstChangedLine != 2 || got.LastChangedLine != 3 {
+			t.Fatalf("cmdInsert output = %#v; want ok true firstChangedLine 2 lastChangedLine 3", got)
 		}
 
 		data, err := os.ReadFile(target)
@@ -412,8 +460,8 @@ func TestCmdInsert(t *testing.T) {
 
 		var got EditResult
 		editTestMustUnmarshal(t, out, &got)
-		if !got.OK || got.FirstChangedLine != 3 {
-			t.Fatalf("cmdInsert output = %#v; want ok true firstChangedLine 3", got)
+		if !got.OK || got.FirstChangedLine != 3 || got.LastChangedLine != 4 {
+			t.Fatalf("cmdInsert output = %#v; want ok true firstChangedLine 3 lastChangedLine 4", got)
 		}
 
 		data, err := os.ReadFile(target)

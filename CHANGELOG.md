@@ -4,6 +4,7 @@
 ### Changed
 
 - Add `anchors` command with `ANCHOR<TAB>TEXT` output and read-shaped JSON.
+- Add `batch --check` validate-only mode and batch `lastChangedLine` / `checked` metadata.
 
 ## [1.0.3] — 2026-06-28
 

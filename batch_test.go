@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func batchTestRun(t *testing.T, target string, req BatchEditRequest) string {
+func batchTestRun(t *testing.T, target string, req BatchEditRequest, checkOnly bool) string {
 	t.Helper()
 
 	payload, err := json.Marshal(req)
@@ -46,7 +46,7 @@ func batchTestRun(t *testing.T, target string, req BatchEditRequest) string {
 		_ = inW.Close()
 	}()
 
-	if err := cmdBatch(target); err != nil {
+	if err := cmdBatch(target, checkOnly); err != nil {
 		t.Fatalf("cmdBatch returned error: %v", err)
 	}
 
@@ -80,9 +80,18 @@ func batchTestReadLines(t *testing.T, path string) []string {
 
 func batchTestWriteReq(t *testing.T, target string, edits ...BatchEditOp) string {
 	t.Helper()
-	out := batchTestRun(t, target, BatchEditRequest{Edits: edits})
+	out := batchTestRun(t, target, BatchEditRequest{Edits: edits}, false)
 	if out == "" {
 		t.Fatal("batch produced empty output")
+	}
+	return out
+}
+
+func batchTestCheckReq(t *testing.T, target string, edits ...BatchEditOp) string {
+	t.Helper()
+	out := batchTestRun(t, target, BatchEditRequest{Edits: edits}, true)
+	if out == "" {
+		t.Fatal("batch --check produced empty output")
 	}
 	return out
 }
@@ -244,4 +253,212 @@ func equalLines(got, want []string) bool {
 		}
 	}
 	return true
+}
+
+func TestCmdBatchLastChangedLine(t *testing.T) {
+	t.Run("single replace includes lastChangedLine", func(t *testing.T) {
+		dir := t.TempDir()
+		target := editTestWriteLinesFile(t, dir, "target.txt", "alpha", "bravo", "charlie")
+
+		out := batchTestWriteReq(t, target, BatchEditOp{
+			OP:    "replace",
+			Pos:   formatTag(2, "bravo"),
+			Lines: []string{"BRAVO"},
+		})
+
+		var got BatchEditResult
+		batchTestMustUnmarshal(t, out, &got)
+		if !got.OK {
+			t.Fatalf("batch failed: %#v", got)
+		}
+		if got.FirstChangedLine != 2 {
+			t.Fatalf("firstChangedLine = %d, want 2", got.FirstChangedLine)
+		}
+		if got.LastChangedLine != 2 {
+			t.Fatalf("lastChangedLine = %d, want 2", got.LastChangedLine)
+		}
+	})
+
+	t.Run("replace range lastChangedLine reflects end_pos", func(t *testing.T) {
+		dir := t.TempDir()
+		target := editTestWriteLinesFile(t, dir, "target.txt", "alpha", "bravo", "charlie", "delta")
+
+		out := batchTestWriteReq(t, target, BatchEditOp{
+			OP:     "replace",
+			Pos:    formatTag(2, "bravo"),
+			EndPos: formatTag(4, "delta"),
+			Lines:  []string{"BRAVO"},
+		})
+
+		var got BatchEditResult
+		batchTestMustUnmarshal(t, out, &got)
+		if !got.OK {
+			t.Fatalf("batch failed: %#v", got)
+		}
+		if got.FirstChangedLine != 2 {
+			t.Fatalf("firstChangedLine = %d, want 2", got.FirstChangedLine)
+		}
+		if got.LastChangedLine != 4 {
+			t.Fatalf("lastChangedLine = %d, want 4", got.LastChangedLine)
+		}
+	})
+
+	t.Run("insert lastChangedLine covers inserted block", func(t *testing.T) {
+		dir := t.TempDir()
+		target := editTestWriteLinesFile(t, dir, "target.txt", "alpha", "bravo", "charlie")
+
+		out := batchTestWriteReq(t, target, BatchEditOp{
+			OP:    "insert",
+			Pos:   formatTag(2, "bravo"),
+			Lines: []string{"one", "two"},
+		})
+
+		var got BatchEditResult
+		batchTestMustUnmarshal(t, out, &got)
+		if !got.OK {
+			t.Fatalf("batch failed: %#v", got)
+		}
+		if got.FirstChangedLine != 2 {
+			t.Fatalf("firstChangedLine = %d, want 2", got.FirstChangedLine)
+		}
+		if got.LastChangedLine != 3 {
+			t.Fatalf("lastChangedLine = %d, want 3", got.LastChangedLine)
+		}
+	})
+
+	t.Run("multi-edit lastChangedLine is max across edits", func(t *testing.T) {
+		dir := t.TempDir()
+		target := editTestWriteLinesFile(t, dir, "target.txt", "alpha", "bravo", "charlie", "delta")
+
+		out := batchTestWriteReq(t, target,
+			BatchEditOp{OP: "replace", Pos: formatTag(1, "alpha"), Lines: []string{"ALPHA"}},
+			BatchEditOp{OP: "replace", Pos: formatTag(4, "delta"), Lines: []string{"DELTA"}},
+		)
+
+		var got BatchEditResult
+		batchTestMustUnmarshal(t, out, &got)
+		if !got.OK {
+			t.Fatalf("batch failed: %#v", got)
+		}
+		if got.FirstChangedLine != 1 {
+			t.Fatalf("firstChangedLine = %d, want 1", got.FirstChangedLine)
+		}
+		if got.LastChangedLine != 4 {
+			t.Fatalf("lastChangedLine = %d, want 4", got.LastChangedLine)
+		}
+	})
+}
+
+func TestCmdBatchCheck(t *testing.T) {
+	t.Run("check mode succeeds and does not write", func(t *testing.T) {
+		dir := t.TempDir()
+		target := editTestWriteLinesFile(t, dir, "target.txt", "alpha", "bravo", "charlie")
+		originalContent, _ := os.ReadFile(target)
+
+		out := batchTestCheckReq(t, target, BatchEditOp{
+			OP:    "replace",
+			Pos:   formatTag(2, "bravo"),
+			Lines: []string{"BRAVO"},
+		})
+
+		var got BatchEditResult
+		batchTestMustUnmarshal(t, out, &got)
+		if !got.OK {
+			t.Fatalf("check mode failed: %#v", got)
+		}
+		if !got.Checked {
+			t.Fatalf("checked = false; want true")
+		}
+		if got.EditsApplied != 1 {
+			t.Fatalf("editsApplied = %d, want 1", got.EditsApplied)
+		}
+		if got.FirstChangedLine != 2 {
+			t.Fatalf("firstChangedLine = %d, want 2", got.FirstChangedLine)
+		}
+		if got.LastChangedLine != 2 {
+			t.Fatalf("lastChangedLine = %d, want 2", got.LastChangedLine)
+		}
+
+		// File must be unchanged
+		afterContent, _ := os.ReadFile(target)
+		if string(afterContent) != string(originalContent) {
+			t.Fatalf("check mode wrote to file: got %q, want %q", string(afterContent), string(originalContent))
+		}
+	})
+
+	t.Run("check mode with range op reports lastChangedLine", func(t *testing.T) {
+		dir := t.TempDir()
+		target := editTestWriteLinesFile(t, dir, "target.txt", "alpha", "bravo", "charlie", "delta")
+
+		out := batchTestCheckReq(t, target, BatchEditOp{
+			OP:     "replace",
+			Pos:    formatTag(2, "bravo"),
+			EndPos: formatTag(3, "charlie"),
+			Lines:  []string{"MIDDLE"},
+		})
+
+		var got BatchEditResult
+		batchTestMustUnmarshal(t, out, &got)
+		if !got.OK || !got.Checked {
+			t.Fatalf("check result = %#v; want ok+checked", got)
+		}
+		if got.FirstChangedLine != 2 {
+			t.Fatalf("firstChangedLine = %d, want 2", got.FirstChangedLine)
+		}
+		if got.LastChangedLine != 3 {
+			t.Fatalf("lastChangedLine = %d, want 3", got.LastChangedLine)
+		}
+	})
+
+	t.Run("check mode stale anchor does not write and reports stale", func(t *testing.T) {
+		dir := t.TempDir()
+		target := editTestWriteLinesFile(t, dir, "target.txt", "alpha", "bravo", "charlie")
+		if err := os.WriteFile(target, []byte("alpha\nmodified\ncharlie\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		originalContent, _ := os.ReadFile(target)
+
+		out := batchTestCheckReq(t, target, BatchEditOp{
+			OP:    "replace",
+			Pos:   formatTag(2, "bravo"),
+			Lines: []string{"NEW"},
+		})
+
+		var got BatchEditError
+		batchTestMustUnmarshal(t, out, &got)
+		if got.OK || got.Error != "stale" {
+			t.Fatalf("check mode stale: got %#v; want stale error", got)
+		}
+		if len(got.Remaps) == 0 {
+			t.Fatalf("expected remaps, got none")
+		}
+
+		afterContent, _ := os.ReadFile(target)
+		if string(afterContent) != string(originalContent) {
+			t.Fatalf("check mode stale wrote to file unexpectedly")
+		}
+	})
+
+	t.Run("check mode invalid op does not write", func(t *testing.T) {
+		dir := t.TempDir()
+		target := editTestWriteLinesFile(t, dir, "target.txt", "alpha", "bravo")
+		originalContent, _ := os.ReadFile(target)
+
+		out := batchTestCheckReq(t, target, BatchEditOp{
+			OP:    "bogus",
+			Pos:   formatTag(1, "alpha"),
+			Lines: []string{"X"},
+		})
+
+		var got BatchEditError
+		batchTestMustUnmarshal(t, out, &got)
+		if got.OK || got.Error != "invalid" {
+			t.Fatalf("check mode invalid: got %#v; want invalid error", got)
+		}
+
+		afterContent, _ := os.ReadFile(target)
+		if string(afterContent) != string(originalContent) {
+			t.Fatalf("check mode invalid wrote to file unexpectedly")
+		}
+	})
 }
