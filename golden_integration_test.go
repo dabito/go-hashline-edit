@@ -115,6 +115,11 @@ func goldenParseJSON(t *testing.T, out string, v any) {
 const goldenUUIDOriginalSHA256 = "52289725d4c8e56e5e41b5bfc08d52ad699639959c1d765b1487fff75f3c8059"
 const goldenUUIDFinalSHA256 = "3ce011302378599768ec28d1ccc37e41d6d7e3bf5fc372fea54d93a02a2baa0d"
 
+const goldenUnicodeJSONOriginalSHA256 = "17c983c1fd4c09182c6baa9921ab25a5345e640a03e7ea15fcb05db964962f42"
+const goldenUnicodeJSONFinalSHA256 = "d3ac1de517d3e892247641e3c1f6c6d18c6cf4881e12286a6cb7765d6619a6b7"
+const goldenComplexMDFixtureOriginalSHA256 = "589d19f334c2a74fe3c666d2870ec6bc1eff222adc10a52858b4de4a3d20da61"
+const goldenComplexMDFixtureFinalSHA256 = "ad34e3ec3192a294ca68231a61290d7a38361a755a003400732f02a195dd6d8e"
+
 func TestGolden_UUIDFixture_ReplaceInsertReplaceRange(t *testing.T) {
 	dir := t.TempDir()
 	bin := goldenBuild(t, dir)
@@ -164,6 +169,87 @@ func TestGolden_UUIDFixture_ReplaceInsertReplaceRange(t *testing.T) {
 	}
 	if finalSHA != goldenUUIDFinalSHA256 {
 		t.Fatalf("final sha = %s, want %s", finalSHA, goldenUUIDFinalSHA256)
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Fixture: unicode.json (Unicode-heavy JSON source)
+// ────────────────────────────────────────────────────────────────────────────
+
+func TestGolden_UnicodeJSONFixture_ReplaceUnicodeLine(t *testing.T) {
+	dir := t.TempDir()
+	bin := goldenBuild(t, dir)
+
+	fixtureBytes, err := os.ReadFile(filepath.Join("testdata", "unicode.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	workFile := filepath.Join(dir, "unicode.json")
+	if err := os.WriteFile(workFile, fixtureBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	originalSHA := goldenFileSHA256(t, workFile)
+	if originalSHA != goldenUnicodeJSONOriginalSHA256 {
+		t.Fatalf("original fixture sha = %s, want %s", originalSHA, goldenUnicodeJSONOriginalSHA256)
+	}
+
+	readOut := goldenRunHledit(t, bin, "", "read", workFile)
+	descriptionAnchor := goldenAnchorContaining(t, readOut, "\"description\": \"Unicode JSON fixture with accents, emoji, and CJK.\",")
+	goldenRunHledit(t, bin,
+		"  \"description\": \"Unicode JSON fixture with accents, emoji, CJK, and more — edited.\",\n",
+		"replace", workFile, descriptionAnchor, "-",
+	)
+
+	finalSHA := goldenFileSHA256(t, workFile)
+	if finalSHA == originalSHA {
+		t.Fatal("final sha unexpectedly equals original sha")
+	}
+	if finalSHA != goldenUnicodeJSONFinalSHA256 {
+		t.Fatalf("final sha = %s, want %s", finalSHA, goldenUnicodeJSONFinalSHA256)
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Fixture: complex.md (larger Markdown source)
+// ────────────────────────────────────────────────────────────────────────────
+
+func TestGolden_ComplexMarkdownFixture_ReplaceRangeAndInsert(t *testing.T) {
+	dir := t.TempDir()
+	bin := goldenBuild(t, dir)
+
+	fixtureBytes, err := os.ReadFile(filepath.Join("testdata", "complex.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	workFile := filepath.Join(dir, "complex.md")
+	if err := os.WriteFile(workFile, fixtureBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	originalSHA := goldenFileSHA256(t, workFile)
+	if originalSHA != goldenComplexMDFixtureOriginalSHA256 {
+		t.Fatalf("original fixture sha = %s, want %s", originalSHA, goldenComplexMDFixtureOriginalSHA256)
+	}
+
+	readOut := goldenRunHledit(t, bin, "", "read", workFile)
+	titleAnchor := goldenAnchorContaining(t, readOut, "# Unicode Markdown Fixture")
+	goldenRunHledit(t, bin, "<!-- verified by golden test -->\n", "insert", "--after", workFile, titleAnchor, "-")
+
+	readOut = goldenRunHledit(t, bin, "", "read", workFile)
+	startAnchor := goldenAnchorContaining(t, readOut, "## Data Model")
+	endAnchor := goldenAnchorContaining(t, readOut, "## Appendix")
+	goldenRunHledit(t, bin,
+		"## Data Model\n\nThis section was rewritten during the golden test.\n\n- `document` keeps metadata.\n- `section` keeps anchors stable.\n- `note` keeps Unicode safe: Ω, ñ, 你, 😀.\n\n```yaml\nkind: document\nlocale: ja-JP\nowner: \"María\"\nstatus: rewritten\n```\n\n### Constraints\n\n1. Headings must stay line-aligned.\n2. Code fences must remain balanced.\n3. Unicode should round-trip without mojibake.\n",
+		"replace-range", workFile, startAnchor, endAnchor, "-",
+	)
+
+	finalSHA := goldenFileSHA256(t, workFile)
+	if finalSHA == originalSHA {
+		t.Fatal("final sha unexpectedly equals original sha")
+	}
+	if finalSHA != goldenComplexMDFixtureFinalSHA256 {
+		t.Fatalf("final sha = %s, want %s", finalSHA, goldenComplexMDFixtureFinalSHA256)
 	}
 }
 
