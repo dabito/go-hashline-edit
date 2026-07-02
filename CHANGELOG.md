@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.2] — 2026-07-01
+
+### Changed
+
+- Track README demo assets so the linked cast/script/gif live in repo.
+
 ## [1.1.1] — 2026-07-01
 
 ### Changed
